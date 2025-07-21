@@ -54,6 +54,18 @@ async function run() {
       }
     };
 
+    // verify admin
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+
+      if (!user || user.role !== "admin") {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
+
     // post user info
     app.post("/users", async (req, res) => {
       const email = req.body.email;
@@ -157,13 +169,13 @@ async function run() {
       try {
         const property = req.body;
 
-        // Optional: Validate required fields
         if (
           !property.title ||
           !property.location ||
           !property.image ||
           !property.agentName ||
           !property.agentEmail ||
+          !property.agentImage ||
           !property.priceRange
         ) {
           return res
@@ -222,6 +234,18 @@ async function run() {
         res.send(result);
       } catch (error) {
         res.status(500).send({ error: "Failed to reject property" });
+      }
+    });
+
+    // get all verified properties
+    app.get("/properties/verified", async (req, res) => {
+      try {
+        const verifiedProperties = await propertiesCollection
+          .find({ status: "verified" })
+          .toArray();
+        res.json(verifiedProperties);
+      } catch (err) {
+        res.status(500).json({ error: "Failed to fetch verified properties" });
       }
     });
 
