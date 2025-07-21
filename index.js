@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { ObjectId, MongoClient, ServerApiVersion } = require("mongodb");
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -175,15 +175,53 @@ async function run() {
         property.createdAt = new Date();
 
         const result = await propertiesCollection.insertOne(property);
-        res
-          .status(201)
-          .json({
-            message: "Property added successfully",
-            insertedId: result.insertedId,
-          });
+        res.status(201).json({
+          message: "Property added successfully",
+          insertedId: result.insertedId,
+        });
       } catch (error) {
         console.error("Failed to add property:", error);
         res.status(500).json({ error: "Internal Server Error" });
+      }
+    });
+
+    // get all pending properties on admin manage properties
+    app.get("/manage-properties", async (req, res) => {
+      try {
+        const result = await propertiesCollection
+          .find({ status: "available" }) // 'available' means not yet verified or rejected
+          .toArray();
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ error: "Failed to fetch properties" });
+      }
+    });
+
+    // verify a property from admin manage property
+    app.patch("/properties/verify/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const result = await propertiesCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { status: "verified" } }
+        );
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ error: "Failed to verify property" });
+      }
+    });
+
+    // reject a property from admin manage property
+    app.patch("/properties/reject/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const result = await propertiesCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { status: "rejected" } }
+        );
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ error: "Failed to reject property" });
       }
     });
 
