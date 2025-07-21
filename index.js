@@ -26,8 +26,33 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
 
+    //collection
     const db = client.db("Real_State_db");
     const usersCollection = db.collection("users");
+    const propertiesCollection = db.collection("properties");
+
+    // custom middlewares
+
+    // verify firebase token
+    const verifyFBToken = async (req, res, next) => {
+      const authHeader = req.headers.authorization;
+      if (!authHeader) {
+        return res.status(401).send({ message: "unauthorized access" });
+      }
+
+      const token = authHeader.split(" ")[1];
+      if (!token) {
+        return res.status(401).send({ message: "unauthorized access" });
+      }
+      //verify the token
+      try {
+        const decoded = await admin.auth().verifyIdToken(token);
+        req.decoded = decoded;
+        next();
+      } catch (error) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+    };
 
     // post user info
     app.post("/users", async (req, res) => {
@@ -45,7 +70,7 @@ async function run() {
     });
 
     // find user role
-    app.get("/users/role/:email", verifyFBToken, async (req, res) => {
+    app.get("/users/role/:email", async (req, res) => {
       const email = req.params.email;
 
       if (!email) {
@@ -66,6 +91,99 @@ async function run() {
       } catch (error) {
         console.error("Error fetching user role:", error);
         res.status(500).send({ message: "Server error" });
+      }
+    });
+
+    // added user media links
+    app.patch("/users", async (req, res) => {
+      try {
+        const { applicant, facebook, twitter, whatsapp } = req.body;
+
+        if (!applicant) {
+          return res.status(400).json({ error: "Applicant email is required" });
+        }
+
+        const result = await usersCollection.updateOne(
+          { email: applicant },
+          {
+            $set: { facebook, twitter, whatsapp },
+          }
+        );
+
+        console.log("Update result:", result);
+        res.json(result);
+      } catch (error) {
+        console.error("PATCH /users error:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+      }
+    });
+
+    // GET /users/socials?email=user@example.com
+    app.get("/users/socials", async (req, res) => {
+      try {
+        const email = req.query.email;
+
+        if (!email) {
+          return res
+            .status(400)
+            .json({ error: "Email query parameter is required" });
+        }
+
+        const user = await usersCollection.findOne(
+          { email },
+          {
+            projection: {
+              _id: 0,
+              facebook: 1,
+              twitter: 1,
+              whatsapp: 1,
+            },
+          }
+        );
+
+        if (!user) {
+          return res.status(404).json({ error: "User not found" });
+        }
+
+        res.json(user); // returns { facebook, twitter, whatsapp }
+      } catch (error) {
+        console.error("GET /users/socials error:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+      }
+    });
+
+    // POST /addProperties
+    app.post("/addProperties", async (req, res) => {
+      try {
+        const property = req.body;
+
+        // Optional: Validate required fields
+        if (
+          !property.title ||
+          !property.location ||
+          !property.image ||
+          !property.agentName ||
+          !property.agentEmail ||
+          !property.priceRange
+        ) {
+          return res
+            .status(400)
+            .json({ error: "All required fields must be provided." });
+        }
+
+        property.status = "available";
+        property.createdAt = new Date();
+
+        const result = await propertiesCollection.insertOne(property);
+        res
+          .status(201)
+          .json({
+            message: "Property added successfully",
+            insertedId: result.insertedId,
+          });
+      } catch (error) {
+        console.error("Failed to add property:", error);
+        res.status(500).json({ error: "Internal Server Error" });
       }
     });
 
