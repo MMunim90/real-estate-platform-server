@@ -249,6 +249,33 @@ async function run() {
       }
     });
 
+    // get single property details on property details page
+    app.get("/properties/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const property = await propertiesCollection.findOne({
+          _id: new ObjectId(id),
+        });
+        res.json(property);
+      } catch (err) {
+        res.status(500).json({ error: "Failed to fetch property details" });
+      }
+    });
+
+    // get reviews by property ID
+    app.get("/reviews", async (req, res) => {
+      try {
+        const { propertyId } = req.query;
+        const reviews = await reviewsCollection
+          .find({ propertyId })
+          .sort({ createdAt: -1 })
+          .toArray();
+        res.json(reviews);
+      } catch (err) {
+        res.status(500).json({ error: "Failed to fetch reviews" });
+      }
+    });
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
