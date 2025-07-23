@@ -30,6 +30,8 @@ async function run() {
     const db = client.db("Real_State_db");
     const usersCollection = db.collection("users");
     const propertiesCollection = db.collection("properties");
+    const wishlistCollection = db.collection("wishlist");
+    const reviewsCollection = db.collection("reviews");
 
     // custom middlewares
 
@@ -65,6 +67,17 @@ async function run() {
       }
       next();
     };
+
+    // get all users
+    app.get("/users", async (req, res) => {
+      try {
+        const result = await usersCollection.find({}).toArray();
+        res.send(result);
+      } catch (error) {
+        console.error("Error fetching user", error);
+        res.status(500).send({ message: "Server error" });
+      }
+    });
 
     // post user info
     app.post("/users", async (req, res) => {
@@ -102,6 +115,35 @@ async function run() {
         res.send({ role: user.role || "user" }); // Default to "user" if no role
       } catch (error) {
         console.error("Error fetching user role:", error);
+        res.status(500).send({ message: "Server error" });
+      }
+    });
+
+    // update user name
+    app.patch("/users/updateName", async (req, res) => {
+      try {
+        const { email, displayName } = req.body;
+
+        if (!email || !displayName) {
+          return res
+            .status(400)
+            .json({ message: "Email and displayName are required" });
+        }
+
+        const result = await usersCollection.updateOne(
+          { email: email },
+          { $set: { displayName: displayName } }
+        );
+
+        if (result.modifiedCount > 0) {
+          res.send({ message: "Display name updated successfully" });
+        } else {
+          res
+            .status(404)
+            .send({ message: "User not found or already has this name" });
+        }
+      } catch (error) {
+        console.error("Error updating display name:", error);
         res.status(500).send({ message: "Server error" });
       }
     });
@@ -176,12 +218,16 @@ async function run() {
           !property.agentName ||
           !property.agentEmail ||
           !property.agentImage ||
-          !property.priceRange
+          !property.minRate ||
+          !property.maxRate
         ) {
           return res
             .status(400)
             .json({ error: "All required fields must be provided." });
         }
+
+        property.minRate = Number(property.minRate);
+        property.maxRate = Number(property.maxRate);
 
         property.status = "available";
         property.createdAt = new Date();
@@ -194,6 +240,24 @@ async function run() {
       } catch (error) {
         console.error("Failed to add property:", error);
         res.status(500).json({ error: "Internal Server Error" });
+      }
+    });
+
+    //get added property of a single agent
+    app.get("/properties", async (req, res) => {
+      try {
+        const { agentEmail } = req.query;
+
+        let query = {};
+        if (agentEmail) {
+          query.agentEmail = agentEmail;
+        }
+
+        const properties = await propertiesCollection.find(query).toArray();
+        res.send(properties);
+      } catch (error) {
+        console.error("Error fetching properties:", error);
+        res.status(500).send({ message: "Server error" });
       }
     });
 
@@ -266,15 +330,140 @@ async function run() {
     app.get("/reviews", async (req, res) => {
       try {
         const { propertyId } = req.query;
+
+        if (!propertyId) {
+          return res
+            .status(400)
+            .json({ error: "propertyId query is required" });
+        }
+
+        const filter = { propertyId };
+        if (ObjectId.isValid(propertyId)) {
+          filter.propertyId = new ObjectId(propertyId);
+        }
+
         const reviews = await reviewsCollection
-          .find({ propertyId })
+          .find(filter)
           .sort({ createdAt: -1 })
           .toArray();
+
         res.json(reviews);
       } catch (err) {
+        console.error(err);
         res.status(500).json({ error: "Failed to fetch reviews" });
       }
     });
+
+    // post review
+    app.post("/reviews", async (req, res) => {
+      try {
+        const review = req.body;
+        review.createdAt = new Date(); // optional: for sorting
+        const result = await reviewsCollection.insertOne(review);
+        res.json(result);
+      } catch (err) {
+        res.status(500).json({ error: "Failed to post review" });
+      }
+    });
+
+    // post property to wishlist
+    app.post("/wishlist", async (req, res) => {
+      try {
+        const wishlistItem = req.body;
+        const result = await wishlistCollection.insertOne(wishlistItem);
+        res.json(result);
+      } catch (err) {
+        res.status(500).json({ error: "Failed to add to wishlist" });
+      }
+    });
+
+    // get all wish list on wishList page
+    app.get("/wishlist", async (req, res) => {
+      try {
+        const email = req.query.email;
+
+        if (!email) {
+          return res
+            .status(400)
+            .json({ error: "Email query parameter is required" });
+        }
+
+        const wishlistItems = await wishlistCollection
+          .find({ userEmail: email })
+          .sort({ _id: -1 })
+          .toArray();
+
+        res.json(wishlistItems);
+      } catch (error) {
+        console.error("Failed to fetch wishlist:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+      }
+    });
+
+    // stats card apis
+    // admin stats card get api
+    app.get("/api/admin-stats", async (req, res) => {
+      try {
+        const totalUsers = await usersCollection.estimatedDocumentCount();
+        const totalVerifiedProperties =
+          await propertiesCollection.countDocuments({ status: "verified" });
+        const totalPendingProperties =
+          await propertiesCollection.countDocuments({ status: "available" });
+        const totalRejectedProperties =
+          await propertiesCollection.countDocuments({ status: "rejected" });
+        const totalReviews = await reviewsCollection.estimatedDocumentCount();
+        const totalVerifiedAgents = await usersCollection.countDocuments({
+          role: "agent",
+        });
+
+        res.json({
+          totalUsers,
+          totalVerifiedProperties,
+          totalPendingProperties,
+          totalRejectedProperties,
+          totalReviews,
+          totalVerifiedAgents,
+        });
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Failed to load admin stats" });
+      }
+    });
+
+    // agent stats card get api
+    app.get("/api/agent-stats", async (req, res) => {
+      try {
+        const email = req.query.email;
+        if (!email) return res.status(400).json({ error: "Email is required" });
+
+        const myAdded = await propertiesCollection.countDocuments({
+          agentEmail: email,
+        });
+        const mySold = await propertiesCollection.countDocuments({
+          agentEmail: email,
+          status: "sold",
+        });
+        const unVerified = await propertiesCollection.countDocuments({
+          agentEmail: email,
+          status: "available",
+        });
+        const requested = await propertiesCollection.countDocuments({
+          agentEmail: email,
+          status: "",
+        });
+        const rejected = await propertiesCollection.countDocuments({
+          agentEmail: email,
+          status: "rejected",
+        });
+
+        res.json({ myAdded, mySold, unVerified, requested, rejected });
+      } catch (err) {
+        console.error("Agent Stats Error", err);
+        res.status(500).json({ error: "Failed to fetch agent stats" });
+      }
+    });
+
+    // user stats card get api
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
