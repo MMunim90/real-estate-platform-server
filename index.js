@@ -337,10 +337,7 @@ async function run() {
             .json({ error: "propertyId query is required" });
         }
 
-        const filter = { propertyId };
-        if (ObjectId.isValid(propertyId)) {
-          filter.propertyId = new ObjectId(propertyId);
-        }
+        const filter = { propertyId }; // keep it as string
 
         const reviews = await reviewsCollection
           .find(filter)
@@ -459,6 +456,9 @@ async function run() {
         const myAdded = await propertiesCollection.countDocuments({
           agentEmail: email,
         });
+        const VerifiedProperties = await propertiesCollection.countDocuments({
+          status: "verified",
+        });
         const mySold = await propertiesCollection.countDocuments({
           agentEmail: email,
           status: "sold",
@@ -476,7 +476,7 @@ async function run() {
           status: "rejected",
         });
 
-        res.json({ myAdded, mySold, unVerified, requested, rejected });
+        res.json({ myAdded, VerifiedProperties, mySold, unVerified, requested, rejected });
       } catch (err) {
         console.error("Agent Stats Error", err);
         res.status(500).json({ error: "Failed to fetch agent stats" });
@@ -495,19 +495,19 @@ async function run() {
           userEmail: email,
         });
 
+        const reviewCount = await reviewsCollection.countDocuments({
+          userEmail: email,
+        });
+
         // const boughtCount = await offersCollection.countDocuments({
         //   buyerEmail: email,
-        //   status: "accepted", 
+        //   status: "accepted",
         // });
-
-        const reviewCount = await reviewsCollection.countDocuments({
-          reviewerEmail: email,
-        });
 
         res.json({
           wishlist: wishlistCount,
-          // bought: boughtCount,
           reviews: reviewCount,
+          // bought: boughtCount,
         });
       } catch (err) {
         console.error("Failed to get user stats", err);
