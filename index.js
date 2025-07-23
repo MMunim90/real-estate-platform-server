@@ -400,6 +400,26 @@ async function run() {
       }
     });
 
+    // get offered property on make offer page
+    app.get("/offered/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+
+        const property = await wishlistCollection.findOne({
+          _id: new ObjectId(id),
+        });
+
+        if (!property) {
+          return res.status(404).json({ error: "Property not found" });
+        }
+
+        res.json(property);
+      } catch (error) {
+        console.error("Error fetching property by ID:", error);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    });
+
     // stats card apis
     // admin stats card get api
     app.get("/api/admin-stats", async (req, res) => {
@@ -464,6 +484,36 @@ async function run() {
     });
 
     // user stats card get api
+    app.get("/api/user-stats", async (req, res) => {
+      try {
+        const email = req.query.email;
+        if (!email) {
+          return res.status(400).json({ error: "Email is required" });
+        }
+
+        const wishlistCount = await wishlistCollection.countDocuments({
+          userEmail: email,
+        });
+
+        // const boughtCount = await offersCollection.countDocuments({
+        //   buyerEmail: email,
+        //   status: "accepted", 
+        // });
+
+        const reviewCount = await reviewsCollection.countDocuments({
+          reviewerEmail: email,
+        });
+
+        res.json({
+          wishlist: wishlistCount,
+          // bought: boughtCount,
+          reviews: reviewCount,
+        });
+      } catch (err) {
+        console.error("Failed to get user stats", err);
+        res.status(500).json({ error: "Server error" });
+      }
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
