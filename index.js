@@ -337,11 +337,12 @@ async function run() {
             .json({ error: "propertyId query is required" });
         }
 
-        const filter = { propertyId }; // keep it as string
+        const filter = { propertyId };
 
         const reviews = await reviewsCollection
           .find(filter)
           .sort({ createdAt: -1 })
+          .limit(4)
           .toArray();
 
         res.json(reviews);
@@ -360,6 +361,24 @@ async function run() {
         res.json(result);
       } catch (err) {
         res.status(500).json({ error: "Failed to post review" });
+      }
+    });
+
+    app.get("/reviewSection", async (req, res) => {
+      try {
+        const { propertyId } = req.query;
+
+        const filter = propertyId ? { propertyId } : {};
+
+        const reviews = await reviewsCollection
+          .find(filter)
+          .sort({ createdAt: -1 })
+          .toArray();
+
+        res.json(reviews);
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to fetch reviews" });
       }
     });
 
@@ -476,7 +495,14 @@ async function run() {
           status: "rejected",
         });
 
-        res.json({ myAdded, VerifiedProperties, mySold, unVerified, requested, rejected });
+        res.json({
+          myAdded,
+          VerifiedProperties,
+          mySold,
+          unVerified,
+          requested,
+          rejected,
+        });
       } catch (err) {
         console.error("Agent Stats Error", err);
         res.status(500).json({ error: "Failed to fetch agent stats" });
