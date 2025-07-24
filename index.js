@@ -364,6 +364,7 @@ async function run() {
       }
     });
 
+    // get latest 4 reviews in reviews section
     app.get("/reviewSection", async (req, res) => {
       try {
         const { propertyId } = req.query;
@@ -373,6 +374,7 @@ async function run() {
         const reviews = await reviewsCollection
           .find(filter)
           .sort({ createdAt: -1 })
+          .limit(4)
           .toArray();
 
         res.json(reviews);
@@ -380,6 +382,26 @@ async function run() {
         console.error(err);
         res.status(500).json({ error: "Failed to fetch reviews" });
       }
+    });
+
+    // GET single user reviews from my reviews
+    app.get("/myReviews", async (req, res) => {
+      const email = req.query.email;
+      if (!email) return res.status(400).json({ error: "Email is required" });
+
+      const reviews = await reviewsCollection.find({ userEmail: email })
+        .sort({ createdAt: -1 })
+        .toArray();
+      res.json(reviews);
+    });
+
+    // DELETE single user reviews from my reviews
+    app.delete("/myReviews/:id", async (req, res) => {
+      const id = req.params.id;
+      const result = await reviewsCollection.deleteOne({
+        _id: new ObjectId(id),
+      });
+      res.json(result);
     });
 
     // post property to wishlist
