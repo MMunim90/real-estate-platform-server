@@ -273,6 +273,30 @@ async function run() {
       }
     });
 
+    // update property by agent
+    app.patch("/properties/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+        const updatedData = req.body;
+
+        updatedData.installments = Number(updatedData.installments);
+
+        const result = await propertiesCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: updatedData }
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).json({ message: "Property not found" });
+        }
+
+        res.json({ message: "Property updated successfully" });
+      } catch (error) {
+        console.error("Failed to update property", error);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    });
+
     // verify a property from admin manage property
     app.patch("/properties/verify/:id", async (req, res) => {
       try {
