@@ -389,10 +389,25 @@ async function run() {
       const email = req.query.email;
       if (!email) return res.status(400).json({ error: "Email is required" });
 
-      const reviews = await reviewsCollection.find({ userEmail: email })
+      const reviews = await reviewsCollection
+        .find({ userEmail: email })
         .sort({ createdAt: -1 })
         .toArray();
       res.json(reviews);
+    });
+
+    // GET allReviews
+    app.get("/allReviews", async (req, res) => {
+      try {
+        const reviews = await reviewsCollection
+          .find()
+          .sort({ createdAt: -1 })
+          .toArray();
+        res.send(reviews);
+      } catch (err) {
+        console.error("Failed to fetch all reviews:", err);
+        res.status(500).json({ error: "Internal server error" });
+      }
     });
 
     // DELETE single user reviews from my reviews
