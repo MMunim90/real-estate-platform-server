@@ -350,6 +350,32 @@ async function run() {
       }
     });
 
+    // delete properties from my properties page
+    app.delete("/properties/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+
+        const result = await propertiesCollection.deleteOne(query);
+
+        if (result.deletedCount === 1) {
+          res
+            .status(200)
+            .json({
+              message: "Property deleted successfully",
+              deletedCount: 1,
+            });
+        } else {
+          res
+            .status(404)
+            .json({ message: "Property not found", deletedCount: 0 });
+        }
+      } catch (error) {
+        console.error("Error deleting property:", error);
+        res.status(500).json({ message: "Internal server error" });
+      }
+    });
+
     // get reviews by property ID
     app.get("/reviews", async (req, res) => {
       try {
