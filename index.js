@@ -32,6 +32,7 @@ async function run() {
     const propertiesCollection = db.collection("properties");
     const wishlistCollection = db.collection("wishlist");
     const reviewsCollection = db.collection("reviews");
+    const advertisementsCollection = db.collection("advertise");
 
     // custom middlewares
 
@@ -337,6 +338,43 @@ async function run() {
       }
     });
 
+    // get all not advertised property
+    app.get("/properties/notAdvertised", async (req, res) => {
+      try {
+        const verifiedProperties = await propertiesCollection
+          .find({ status: "verified" })
+          .toArray();
+
+        const advertised = await advertisementsCollection
+          .find({}, { projection: { propertyId: 1 } })
+          .toArray();
+
+        const advertisedIds = advertised.map((ad) => ad.propertyId.toString());
+
+        const notAdvertised = verifiedProperties.filter(
+          (property) => !advertisedIds.includes(property._id.toString())
+        );
+
+        res.json(notAdvertised);
+      } catch (err) {
+        console.error("Error fetching not advertised properties:", err);
+        res
+          .status(500)
+          .json({ error: "Failed to fetch not advertised properties" });
+      }
+    });
+
+    // GET all advertised property
+    app.get("/properties/advertised", async (req, res) => {
+      try {
+        const ads = await advertisementsCollection.find().toArray();
+        res.send(ads);
+      } catch (error) {
+        console.error("Error fetching advertisements:", error);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    });
+
     // get single property details on property details page
     app.get("/properties/:id", async (req, res) => {
       try {
@@ -359,12 +397,10 @@ async function run() {
         const result = await propertiesCollection.deleteOne(query);
 
         if (result.deletedCount === 1) {
-          res
-            .status(200)
-            .json({
-              message: "Property deleted successfully",
-              deletedCount: 1,
-            });
+          res.status(200).json({
+            message: "Property deleted successfully",
+            deletedCount: 1,
+          });
         } else {
           res
             .status(404)
@@ -625,6 +661,56 @@ async function run() {
       } catch (err) {
         console.error("Failed to get user stats", err);
         res.status(500).json({ error: "Server error" });
+      }
+    });
+
+    //post on advertisement collection
+    app.post("/properties/advertise/:id", async (req, res) => {
+      const propertyId = req.params.id;
+
+      try {
+        // Find the property by ID and ensure it's admin verified
+        const property = await propertiesCollection.findOne({
+          _id: new ObjectId(propertyId),
+          status: "verified",
+        });
+
+        if (!property) {
+          return res
+            .status(404)
+            .json({ error: "Property not found or not verified by admin" });
+        }
+
+        // Check if already advertised
+        const alreadyAdvertised = await advertisementsCollection.findOne({
+          propertyId: propertyId,
+        });
+
+        if (alreadyAdvertised) {
+          return res.status(409).json({ error: "Property already advertised" });
+        }
+
+        // Create advertisement entry
+        const advertisementDoc = {
+          propertyId: propertyId,
+          title: property.title,
+          image: property.image,
+          location: property.location,
+          maxRate: property.maxRate,
+          minRate: property.minRate,
+          status: property.status,
+          installments: property.installments,
+          createdAt: new Date(),
+        };
+
+        const result = await advertisementsCollection.insertOne(
+          advertisementDoc
+        );
+
+        res.send({ modifiedCount: result.insertedId ? 1 : 0 });
+      } catch (error) {
+        console.error("Error advertising property:", error);
+        res.status(500).json({ error: "Internal server error" });
       }
     });
 
