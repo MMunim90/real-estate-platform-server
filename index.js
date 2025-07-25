@@ -81,6 +81,79 @@ async function run() {
       }
     });
 
+    // manage users's api's for admin
+    // make admin
+    app.patch("/users/admin/:id", async (req, res) => {
+      const { id } = req.params;
+      try {
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { role: "admin" } }
+        );
+        res.json({ modifiedCount: result.modifiedCount });
+      } catch (err) {
+        res.status(500).json({ error: "Failed to make admin" });
+      }
+    });
+
+    // make agent
+    app.patch("/users/agent/:id", async (req, res) => {
+      const { id } = req.params;
+      try {
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { role: "agent" } }
+        );
+        res.json({ modifiedCount: result.modifiedCount });
+      } catch (err) {
+        res.status(500).json({ error: "Failed to make agent" });
+      }
+    });
+
+    // mark as fraud
+    app.patch("/users/fraud/:id", async (req, res) => {
+      const { id } = req.params;
+      try {
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { isFraud: true } }
+        );
+        res.json({ modifiedCount: result.modifiedCount });
+      } catch (err) {
+        res.status(500).json({ error: "Failed to mark fraud" });
+      }
+    });
+
+    //  delete all properties of fraud agent
+    app.delete("/properties/by-email/:email", async (req, res) => {
+      const { email } = req.params;
+      try {
+        const result = await propertiesCollection.deleteMany({
+          agentEmail: email,
+        });
+        res.json({ deletedCount: result.deletedCount });
+      } catch (err) {
+        res.status(500).json({ error: "Failed to delete properties" });
+      }
+    });
+
+    // delete user
+    app.delete("/users/:id", async (req, res) => {
+      const { id } = req.params;
+      try {
+        const result = await usersCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+        if (result.deletedCount === 1) {
+          res.json({ success: true });
+        } else {
+          res.status(404).json({ error: "User not found" });
+        }
+      } catch (err) {
+        res.status(500).json({ error: "Failed to delete user" });
+      }
+    });
+
     // post user info
     app.post("/users", async (req, res) => {
       const email = req.body.email;
@@ -487,12 +560,10 @@ async function run() {
         }
       } catch (err) {
         console.error("Error deleting report:", err);
-        res
-          .status(500)
-          .json({
-            success: false,
-            message: "Server error while deleting report.",
-          });
+        res.status(500).json({
+          success: false,
+          message: "Server error while deleting report.",
+        });
       }
     });
 
@@ -763,6 +834,7 @@ async function run() {
           agentEmail: email,
         });
         const VerifiedProperties = await propertiesCollection.countDocuments({
+          agentEmail: email,
           status: "verified",
         });
         const mySold = await propertiesCollection.countDocuments({
@@ -813,8 +885,8 @@ async function run() {
         });
 
         // const boughtCount = await offersCollection.countDocuments({
-        //   buyerEmail: email,
-        //   status: "accepted",
+        //   userEmail: email,
+        //   status: "sold",
         // });
 
         res.json({
