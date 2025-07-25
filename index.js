@@ -33,6 +33,7 @@ async function run() {
     const wishlistCollection = db.collection("wishlist");
     const reviewsCollection = db.collection("reviews");
     const advertisementsCollection = db.collection("advertise");
+    const reportsCollection = db.collection("reports");
 
     // custom middlewares
 
@@ -342,7 +343,10 @@ async function run() {
     app.get("/properties/notAdvertised", async (req, res) => {
       try {
         const verifiedProperties = await propertiesCollection
-          .find({ status: "verified" })
+          .find({
+            status: "verified",
+            installments: { $ne: null }, // not null
+          })
           .toArray();
 
         const advertised = await advertisementsCollection
@@ -352,7 +356,9 @@ async function run() {
         const advertisedIds = advertised.map((ad) => ad.propertyId.toString());
 
         const notAdvertised = verifiedProperties.filter(
-          (property) => !advertisedIds.includes(property._id.toString())
+          (property) =>
+            !advertisedIds.includes(property._id.toString()) &&
+            property.installments // ensure it's not falsy (e.g. 0, undefined)
         );
 
         res.json(notAdvertised);
@@ -371,6 +377,26 @@ async function run() {
         res.send(ads);
       } catch (error) {
         console.error("Error fetching advertisements:", error);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    });
+
+    // delete advertise property
+    app.delete("/properties/advertise/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+
+        const result = await advertisementsCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+
+        if (result.deletedCount > 0) {
+          res.json({ success: true });
+        } else {
+          res.status(404).json({ error: "Advertisement not found" });
+        }
+      } catch (err) {
+        console.error("Failed to delete advertisement:", err);
         res.status(500).json({ error: "Internal server error" });
       }
     });
@@ -409,6 +435,122 @@ async function run() {
       } catch (error) {
         console.error("Error deleting property:", error);
         res.status(500).json({ message: "Internal server error" });
+      }
+    });
+
+    // post repots
+    app.post("/reports", async (req, res) => {
+      try {
+        const report = req.body;
+
+        if (!report.propertyId || !report.userEmail || !report.reason) {
+          return res.status(400).json({ error: "Missing required fields" });
+        }
+
+        const result = await reportsCollection.insertOne(report);
+        res.status(201).json(result);
+      } catch (err) {
+        console.error("Error submitting report:", err);
+        res.status(500).json({ error: "Failed to submit report" });
+      }
+    });
+
+    // get report
+    app.get("/reports", async (req, res) => {
+      try {
+        const reports = await reportsCollection.find().toArray();
+        res.send(reports);
+      } catch (err) {
+        res.status(500).json({ error: "Failed to fetch reports" });
+      }
+    });
+
+    // delete single report (not reported property) by admin
+    // DELETE /reports/:id
+    app.delete("/reports/:id", async (req, res) => {
+      const { id } = req.params;
+
+      try {
+        const result = await reportsCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+
+        if (result.deletedCount === 1) {
+          return res.json({
+            success: true,
+            message: "Report deleted successfully.",
+          });
+        } else {
+          return res
+            .status(404)
+            .json({ success: false, message: "Report not found." });
+        }
+      } catch (err) {
+        console.error("Error deleting report:", err);
+        res
+          .status(500)
+          .json({
+            success: false,
+            message: "Server error while deleting report.",
+          });
+      }
+    });
+
+    //
+
+    // delete report
+    // app.delete("/reports/:propertyId", async (req, res) => {
+    //   try {
+    //     const propertyId = req.params.propertyId;
+
+    //     const result = await reportsCollection.deleteMany({ propertyId });
+
+    //     res.json({
+    //       message: "Associated reports deleted",
+    //       deletedCount: result.deletedCount,
+    //     });
+    //   } catch (error) {
+    //     console.error("Failed to delete reports:", error);
+    //     res.status(500).json({ error: "Internal Server Error" });
+    //   }
+    // });
+
+    // DELETE /admin/remove-property/:propertyId
+    app.delete("/admin/remove-property/:propertyId", async (req, res) => {
+      const propertyId = req.params.propertyId;
+
+      try {
+        const objectId = new ObjectId(propertyId);
+
+        const propertyResult = await propertiesCollection.deleteOne({
+          _id: objectId,
+        });
+
+        if (propertyResult.deletedCount !== 1) {
+          return res.json({ success: false, message: "Property not found." });
+        }
+
+        const reviewResult = await reviewsCollection.deleteMany({ propertyId });
+        const reportResult = await reportsCollection.deleteMany({ propertyId });
+        const advertiseResult = await advertisementsCollection.deleteMany({
+          propertyId,
+        });
+        const wishlistResult = await wishlistCollection.deleteMany({
+          propertyId,
+        });
+
+        res.json({
+          success: true,
+          reviewsDeleted: reviewResult.deletedCount,
+          reportsDeleted: reportResult.deletedCount,
+          adsDeleted: advertiseResult.deletedCount,
+          wishlistsDeleted: wishlistResult.deletedCount,
+        });
+      } catch (error) {
+        console.error("Error in property deletion:", error);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal server error." });
       }
     });
 
@@ -505,6 +647,22 @@ async function run() {
       res.json(result);
     });
 
+    // app.delete("/reviews/:propertyId", async (req, res) => {
+    //   try {
+    //     const propertyId = req.params.propertyId;
+
+    //     const result = await reviewsCollection.deleteMany({ propertyId });
+
+    //     res.status(200).json({
+    //       message: "Associated reviews deleted successfully",
+    //       deletedCount: result.deletedCount,
+    //     });
+    //   } catch (error) {
+    //     console.error("Failed to delete reviews:", error);
+    //     res.status(500).json({ error: "Internal Server Error" });
+    //   }
+    // });
+
     // post property to wishlist
     app.post("/wishlist", async (req, res) => {
       try {
@@ -574,6 +732,10 @@ async function run() {
         const totalVerifiedAgents = await usersCollection.countDocuments({
           role: "agent",
         });
+        const totalAdvertisedProperties =
+          await advertisementsCollection.countDocuments();
+        const totalReportedProperties =
+          await reportsCollection.countDocuments();
 
         res.json({
           totalUsers,
@@ -582,6 +744,8 @@ async function run() {
           totalRejectedProperties,
           totalReviews,
           totalVerifiedAgents,
+          totalAdvertisedProperties,
+          totalReportedProperties,
         });
       } catch (error) {
         console.error(error);
