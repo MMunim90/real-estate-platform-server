@@ -34,6 +34,7 @@ async function run() {
     const reviewsCollection = db.collection("reviews");
     const advertisementsCollection = db.collection("advertise");
     const reportsCollection = db.collection("reports");
+    const offersCollection = db.collection("offers");
 
     // custom middlewares
 
@@ -734,6 +735,84 @@ async function run() {
     //   }
     // });
 
+    // post offers
+    app.post("/offers", async (req, res) => {
+      const offerData = req.body;
+
+      if (
+        !offerData.propertyId ||
+        !offerData.title ||
+        !offerData.location ||
+        !offerData.agentName ||
+        !offerData.buyerEmail ||
+        !offerData.buyerName ||
+        !offerData.offerAmount ||
+        !offerData.buyingDate
+      ) {
+        return res
+          .status(400)
+          .json({ error: "Missing required offer fields." });
+      }
+
+      const newOffer = {
+        ...offerData,
+        status: "pending", // default status
+        createdAt: new Date(),
+      };
+
+      try {
+        const result = await offersCollection.insertOne(newOffer);
+        res.status(201).json({ success: true, insertedId: result.insertedId });
+      } catch (err) {
+        console.error("Error inserting offer:", err);
+        res.status(500).json({ error: "Failed to submit the offer." });
+      }
+    });
+
+    // get specific user offer or make offer card
+    app.get("/offers", async (req, res) => {
+      try {
+        const email = req.query.email;
+        if (!email) {
+          return res
+            .status(400)
+            .json({ error: "Email query parameter is required" });
+        }
+
+        const offers = await offersCollection
+          .find({ buyerEmail: email })
+          .sort({ createdAt: -1 })
+          .toArray();
+        res.status(200).json(offers);
+      } catch (error) {
+        console.error("Failed to fetch offers:", error);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    });
+
+    // get requested offer for agent
+    app.get("/offers/agent", async (req, res) => {
+      try {
+        const email = req.query.email;
+
+        if (!email) {
+          return res
+            .status(400)
+            .json({ error: "Agent email query parameter is required" });
+        }
+
+        const offers = await offersCollection
+          .find({ agentEmail: email })
+          .sort({ createdAt: -1 })
+          .toArray();
+
+        res.status(200).json(offers);
+      } catch (error) {
+        console.error("Failed to fetch offers for agent:", error);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    });
+
     // post property to wishlist
     app.post("/wishlist", async (req, res) => {
       try {
@@ -845,9 +924,9 @@ async function run() {
           agentEmail: email,
           status: "available",
         });
-        const requested = await propertiesCollection.countDocuments({
+        const requested = await offersCollection.countDocuments({
           agentEmail: email,
-          status: "",
+          status: "pending",
         });
         const rejected = await propertiesCollection.countDocuments({
           agentEmail: email,
