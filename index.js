@@ -590,7 +590,7 @@ async function run() {
     });
 
     // get report
-    app.get("/reports", verifyFBToken, verifyAdmin, async (req, res) => {
+    app.get("/reports", verifyFBToken, async (req, res) => {
       try {
         const reports = await reportsCollection.find().toArray();
         res.send(reports);
@@ -759,7 +759,7 @@ async function run() {
     });
 
     // GET allReviews
-    app.get("/allReviews", verifyFBToken, verifyAdmin, async (req, res) => {
+    app.get("/allReviews", verifyFBToken, async (req, res) => {
       try {
         const reviews = await reviewsCollection
           .find()
