@@ -550,25 +550,47 @@ async function run() {
 
     // delete properties from my properties page
     app.delete("/properties/:id", async (req, res) => {
+      const propertyId = req.params.id;
+      
       try {
-        const id = req.params.id;
-        const query = { _id: new ObjectId(id) };
+        const objectId = new ObjectId(propertyId);
 
-        const result = await propertiesCollection.deleteOne(query);
+        // Delete from main properties collection
+        const propertyResult = await propertiesCollection.deleteOne({
+          _id: objectId,
+        });
 
-        if (result.deletedCount === 1) {
-          res.status(200).json({
-            message: "Property deleted successfully",
-            deletedCount: 1,
-          });
-        } else {
-          res
+        if (propertyResult.deletedCount !== 1) {
+          return res
             .status(404)
-            .json({ message: "Property not found", deletedCount: 0 });
+            .json({ success: false, message: "Property not found." });
         }
+
+        // Use string id for associated data
+        const reviewResult = await reviewsCollection.deleteMany({ propertyId });
+        const reportResult = await reportsCollection.deleteMany({ propertyId });
+        const advertiseResult = await advertisementsCollection.deleteMany({
+          propertyId,
+        });
+        const wishlistResult = await wishlistCollection.deleteMany({
+          propertyId,
+        });
+        const offerResult = await offersCollection.deleteMany({ propertyId });
+
+        res.json({
+          success: true,
+          message: "Property and associated data deleted successfully.",
+          reviewsDeleted: reviewResult.deletedCount,
+          reportsDeleted: reportResult.deletedCount,
+          adsDeleted: advertiseResult.deletedCount,
+          wishlistsDeleted: wishlistResult.deletedCount,
+          offersDeleted: offerResult.deletedCount,
+        });
       } catch (error) {
-        console.error("Error deleting property:", error);
-        res.status(500).json({ message: "Internal server error" });
+        console.error("Error in property deletion:", error);
+        res
+          .status(500)
+          .json({ success: false, message: "Internal server error." });
       }
     });
 
