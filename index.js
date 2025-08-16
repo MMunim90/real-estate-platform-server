@@ -457,10 +457,26 @@ async function run() {
     // get all verified properties
     app.get("/properties/verified", async (req, res) => {
       try {
+        const page = parseInt(req.query.page) || 1;
+        const size = parseInt(req.query.size) || 8;
+
+        const skip = (page - 1) * size;
+
+        const total = await propertiesCollection.countDocuments({
+          status: "verified",
+        });
         const verifiedProperties = await propertiesCollection
           .find({ status: "verified" })
+          .skip(skip)
+          .limit(size)
           .toArray();
-        res.json(verifiedProperties);
+
+        res.json({
+          total,
+          page,
+          size,
+          properties: verifiedProperties,
+        });
       } catch (err) {
         res.status(500).json({ error: "Failed to fetch verified properties" });
       }
@@ -551,7 +567,7 @@ async function run() {
     // delete properties from my properties page
     app.delete("/properties/:id", async (req, res) => {
       const propertyId = req.params.id;
-      
+
       try {
         const objectId = new ObjectId(propertyId);
 
